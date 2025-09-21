@@ -20,6 +20,8 @@ func main() {
 			// Обертываем http.Handler в gin.HandlerFunc
 			order.GET("/", gin.WrapH(http.HandlerFunc(orderHandler.GetAllOrders)))
 		}
+
+		// product
 	}
 
 	router.Run(":8080")
