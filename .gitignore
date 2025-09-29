@@ -1,3 +1,5 @@
+.gitignore
+
 # Бинарные файлы и исполняемые файлы
 *.exe
 *.exe~
@@ -37,3 +39,6 @@
 # Swagger UI файлы (если скачиваете вручную)
 /swagger-ui/
 /swagger/
+
+# Docker (опционально)
+.dockerignore

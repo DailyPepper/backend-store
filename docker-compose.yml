@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: backend-store-db
+    environment:
+      POSTGRES_DB: store_db
+      POSTGRES_USER: store_user
+      POSTGRES_PASSWORD: store_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U store_user -d store_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backend-store-app
+    environment:
+      DATABASE_URL: "postgres://store_user:store_password@postgres:5432/store_db?sslmode=disable"
+      GIN_MODE: release
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  backend-network:
+    driver: bridge
