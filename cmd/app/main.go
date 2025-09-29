@@ -7,6 +7,8 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"     // swagger embed files
+	ginSwagger "github.com/swaggo/gin-swagger" // gin-swagger middleware
 )
 
 func main() {
@@ -37,6 +39,9 @@ func main() {
 
 	router := gin.Default()
 
+	url := ginSwagger.URL("/openapi.yaml")
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, url))
+
 	api := router.Group("/api")
 	{
 		order := api.Group("/order")
@@ -59,5 +64,6 @@ func main() {
 	}
 
 	log.Println("Server starting on :8080")
+	log.Println("OpenAPI spec: http://localhost:8080/openapi.yaml")
 	router.Run(":8080")
 }

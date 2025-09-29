@@ -1,2 +1,39 @@
+# Бинарные файлы и исполняемые файлы
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/dist/
+/build/
 
+# Файлы специфичные для Go
+/.idea/
+/.vscode/
+*.test
+*.out
+/coverage.txt
+/profile.out
+
+# Временные файлы
+*.tmp
+*.temp
+/tmp/
+
+# Логи
+*.log
+*.logs
+
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# Автогенерируемые файлы (если не хотите коммитить)
+/api.gen.go
+*.gen.go
+
+# Swagger UI файлы (если скачиваете вручную)
+/swagger-ui/
+/swagger/
