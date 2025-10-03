@@ -5,34 +5,21 @@ info:
   version: 1.0.0
 
 servers:
-  - url: http://localhost:8080
-    description: Local development server
+  - url: http://localhost:8080        
+    description: Local dev
+  - url: https://store/api            
+    description: Prod
 
 paths:
-  /orders:
+  /api/order:
     get:
+      operationId: listOrders
       summary: Get all orders with pagination
       description: Retrieve a paginated list of all orders
-      tags:
-        - Orders
+      tags: [Orders]
       parameters:
-        - name: page
-          in: query
-          description: Page number for pagination
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - name: limit
-          in: query
-          description: Number of items per page
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 10
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
       responses:
         '200':
           description: Successful response with paginated orders
@@ -48,10 +35,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
     post:
+      operationId: createOrder
       summary: Create a new order
       description: Create a new order with transaction support
-      tags:
-        - Orders
+      tags: [Orders]
       requestBody:
         required: true
         content:
@@ -78,12 +65,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /orders/{id}:
+  /api/order/{id}:
     get:
+      operationId: getOrderById
       summary: Get order by ID
       description: Retrieve a specific order by its ID
-      tags:
-        - Orders
+      tags: [Orders]
       parameters:
         - name: id
           in: path
@@ -119,10 +106,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
     put:
+      operationId: updateOrder
       summary: Update order
       description: Update an existing order with transaction support
-      tags:
-        - Orders
+      tags: [Orders]
       parameters:
         - name: id
           in: path
@@ -164,10 +151,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
     delete:
+      operationId: deleteOrder
       summary: Delete order
       description: Delete an order with transaction support
-      tags:
-        - Orders
+      tags: [Orders]
       parameters:
         - name: id
           in: path
@@ -202,7 +189,205 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/product:
+    get:
+      operationId: listProducts
+      summary: Get all products
+      description: Retrieve a list of all products
+      tags: [Products]
+      responses:
+        '200':
+          description: Successful response with products list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      operationId: createProduct
+      summary: Create a new product
+      description: Create a new product
+      tags: [Products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Bad request - invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/product/{id}:
+    get:
+      operationId: getProductById
+      summary: Get product by ID
+      description: Retrieve a specific product by its ID
+      tags: [Products]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Product found successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid product ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateProduct
+      summary: Update product
+      description: Update an existing product
+      tags: [Products]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Product updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Bad request - invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      operationId: deleteProduct
+      summary: Delete product
+      description: Delete a product
+      tags: [Products]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Product deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid product ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Page number for pagination
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    LimitParam:
+      name: limit
+      in: query
+      description: Number of items per page
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+
   schemas:
     Order:
       type: object
@@ -212,6 +397,7 @@ components:
         - total_amount
         - status
         - created_at
+        - updated_at
       properties:
         id:
           type: integer
@@ -231,11 +417,7 @@ components:
         status:
           type: string
           description: Status of the order
-          enum:
-            - pending
-            - processing
-            - completed
-            - cancelled
+          enum: [pending, processing, completed, cancelled]
           default: pending
           example: pending
         created_at:
@@ -243,6 +425,11 @@ components:
           format: date-time
           description: Order creation timestamp
           example: "2023-10-05T14:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Order last update timestamp
+          example: "2023-10-05T16:45:00Z"
 
     CreateOrderRequest:
       type: object
@@ -262,16 +449,8 @@ components:
           exclusiveMinimum: true
           description: Total amount of the order (must be positive)
           example: 99.99
-        status:
-          type: string
-          description: Status of the order
-          enum:
-            - pending
-            - processing
-            - completed
-            - cancelled
-          default: pending
-          example: pending
+      description: >
+        Status is not accepted on creation; it defaults to "pending" on the server side.
 
     UpdateOrderRequest:
       type: object
@@ -291,16 +470,52 @@ components:
           minimum: 0
           exclusiveMinimum: true
           description: Total amount of the order (must be positive)
-          example: 99.99
+          example: 149.99
         status:
           type: string
           description: Status of the order
-          enum:
-            - pending
-            - processing
-            - completed
-            - cancelled
+          enum: [pending, processing, completed, cancelled]
           example: completed
+
+    PaginationMeta:
+      type: object
+      description: Pagination metadata
+      required: [page, limit, total, total_pages, has_next, has_prev]
+      properties:
+        page:
+          type: integer
+          description: Current page number (1-based)
+          example: 1
+        limit:
+          type: integer
+          description: Number of items per page
+          example: 10
+        total:
+          type: integer
+          description: Total number of items across all pages
+          example: 50
+        total_pages:
+          type: integer
+          description: Total number of pages
+          example: 5
+        has_next:
+          type: boolean
+          description: Whether there is a next page
+          example: true
+        has_prev:
+          type: boolean
+          description: Whether there is a previous page
+          example: false
+        next_page:
+          type: integer
+          nullable: true
+          description: Next page number if available
+          example: 2
+        prev_page:
+          type: integer
+          nullable: true
+          description: Previous page number if available
+          example: null
 
     OrdersListResponse:
       type: object
@@ -310,20 +525,7 @@ components:
           items:
             $ref: '#/components/schemas/Order'
         pagination:
-          type: object
-          properties:
-            page:
-              type: integer
-              description: Current page number
-              example: 1
-            limit:
-              type: integer
-              description: Number of items per page
-              example: 10
-            total:
-              type: integer
-              description: Total number of orders
-              example: 50
+          $ref: '#/components/schemas/PaginationMeta'
 
     ErrorResponse:
       type: object
@@ -340,6 +542,87 @@ components:
           type: string
           description: Success message
           example: "Order deleted successfully"
+
+    Product:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - price
+        - created_at
+      properties:
+        id:
+          type: integer
+          description: Unique identifier for the product
+          example: 1
+        name:
+          type: string
+          description: Name of the product
+          example: "Laptop"
+        description:
+          type: string
+          description: Description of the product
+          example: "High-performance laptop for work and gaming"
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Price of the product
+          example: 999.99
+        created_at:
+          type: string
+          format: date-time
+          description: Product creation timestamp
+          example: "2023-10-05T14:30:00Z"
+
+    CreateProductRequest:
+      type: object
+      required:
+        - name
+        - description
+        - price
+      properties:
+        name:
+          type: string
+          description: Name of the product
+          minLength: 1
+          example: "Laptop"
+        description:
+          type: string
+          description: Description of the product
+          minLength: 1
+          example: "High-performance laptop for work and gaming"
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Price of the product
+          example: 999.99
+
+    UpdateProductRequest:
+      type: object
+      required:
+        - name
+        - description
+        - price
+      properties:
+        name:
+          type: string
+          description: Name of the product
+          minLength: 1
+          example: "Gaming Laptop"
+        description:
+          type: string
+          description: Description of the product
+          minLength: 1
+          example: "High-performance gaming laptop with RTX graphics"
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Price of the product
+          example: 1299.99
 
   securitySchemes:
     BearerAuth:

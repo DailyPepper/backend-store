@@ -4,11 +4,14 @@ import (
 	"backend-store/internal/config"
 	"backend-store/internal/handlers"
 	"backend-store/internal/storage"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"     // swagger embed files
-	ginSwagger "github.com/swaggo/gin-swagger" // gin-swagger middleware
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -39,8 +42,29 @@ func main() {
 
 	router := gin.Default()
 
-	url := ginSwagger.URL("/openapi.yaml")
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, url))
+	router.GET("/openapi.yaml", func(c *gin.Context) {
+		openAPIPath := filepath.Join("api", "openapi.yaml")
+
+		content, err := ioutil.ReadFile(openAPIPath)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "OpenAPI spec not found"})
+			return
+		}
+
+		c.Data(http.StatusOK, "application/yaml; charset=utf-8", content)
+	})
+
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(
+		swaggerFiles.Handler,
+		ginSwagger.URL("/openapi.yaml"),
+		ginSwagger.DeepLinking(true),
+	))
+
+	router.GET("/docs/*any", ginSwagger.WrapHandler(
+		swaggerFiles.Handler,
+		ginSwagger.URL("/openapi.yaml"),
+		ginSwagger.DeepLinking(true),
+	))
 
 	api := router.Group("/api")
 	{
@@ -63,7 +87,6 @@ func main() {
 		}
 	}
 
-	log.Println("Server starting on :8080")
-	log.Println("OpenAPI spec: http://localhost:8080/openapi.yaml")
+	log.Println("Docs UI: http://localhost:8080/docs/index.html")
 	router.Run(":8080")
 }
