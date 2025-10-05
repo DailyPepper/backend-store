@@ -2,57 +2,36 @@ package handlers
 
 import (
 	"backend-store/internal/models"
-	"backend-store/internal/storage"
-	"context"
+	"backend-store/internal/service"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 type ProductHandler struct {
-	storage storage.Storage
+	productService service.ProductService
 }
 
-func NewProductHandler(storage storage.Storage) *ProductHandler {
-	return &ProductHandler{storage: storage}
+func NewProductHandler(productService service.ProductService) *ProductHandler {
+	return &ProductHandler{productService: productService}
 }
 
 func (h *ProductHandler) CreateProduct(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-
 	var product models.Product
 	if err := c.ShouldBindJSON(&product); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
 		return
 	}
 
-	// Валидация
-	if product.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Product name is required"})
-		return
-	}
-	if product.Price <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Price must be positive"})
-		return
-	}
-
-	tx, err := h.storage.BeginTx(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
-		return
-	}
-	defer tx.Rollback()
-
-	if err := tx.CreateProduct(&product); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create product: " + err.Error()})
-		return
-	}
-
-	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction: " + err.Error()})
+	if err := h.productService.CreateProduct(c.Request.Context(), &product); err != nil {
+		if contains(err.Error(), "validate") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else if contains(err.Error(), "already exists") {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create product: " + err.Error()})
+		}
 		return
 	}
 
@@ -60,31 +39,56 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 }
 
 func (h *ProductHandler) GetAllProducts(c *gin.Context) {
-	_, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
-	defer cancel()
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 
-	products, err := h.storage.GetAllProduct()
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	products, err := h.productService.GetAllProducts(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch products: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, products)
+	start := (page - 1) * limit
+	end := start + limit
+
+	var paginatedProducts []*models.Product
+	if start < len(products) {
+		if end > len(products) {
+			end = len(products)
+		}
+		paginatedProducts = products[start:end]
+	} else {
+		paginatedProducts = []*models.Product{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"products": paginatedProducts,
+		"pagination": gin.H{
+			"page":  page,
+			"limit": limit,
+			"total": len(products),
+			"pages": (len(products) + limit - 1) / limit,
+		},
+	})
 }
 
 func (h *ProductHandler) GetProductByID(c *gin.Context) {
-	_, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
-	defer cancel()
-
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 		return
 	}
 
-	product, err := h.storage.GetProductByID(id)
+	product, err := h.productService.GetProductByID(c.Request.Context(), id)
 	if err != nil {
-		if err.Error() == "product not found" {
+		if contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch product: " + err.Error()})
@@ -96,9 +100,6 @@ func (h *ProductHandler) GetProductByID(c *gin.Context) {
 }
 
 func (h *ProductHandler) UpdateProduct(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
@@ -112,34 +113,14 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	}
 	product.ID = id
 
-	tx, err := h.storage.BeginTx(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
-		return
-	}
-	defer tx.Rollback()
-
-	// Проверяем существование продукта
-	existingProduct, err := tx.GetProductByID(id)
-	if err != nil {
-		if err.Error() == "product not found" {
+	if err := h.productService.UpdateProduct(c.Request.Context(), &product); err != nil {
+		if contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
+		} else if contains(err.Error(), "validate") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch product: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update product: " + err.Error()})
 		}
-		return
-	}
-
-	// Сохраняем createdAt из существующего продукта
-	product.CreatedAt = existingProduct.CreatedAt
-
-	if err := tx.UpdateProduct(&product); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update product: " + err.Error()})
-		return
-	}
-
-	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction: " + err.Error()})
 		return
 	}
 
@@ -147,40 +128,20 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 }
 
 func (h *ProductHandler) DeleteProduct(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 		return
 	}
 
-	tx, err := h.storage.BeginTx(ctx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
-		return
-	}
-	defer tx.Rollback()
-
-	// Проверяем существование продукта
-	_, err = tx.GetProductByID(id)
-	if err != nil {
-		if err.Error() == "product not found" {
+	if err := h.productService.DeleteProduct(c.Request.Context(), id); err != nil {
+		if contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
+		} else if contains(err.Error(), "cannot delete") {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch product: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete product: " + err.Error()})
 		}
-		return
-	}
-
-	if err := tx.DeleteProduct(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete product: " + err.Error()})
-		return
-	}
-
-	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction: " + err.Error()})
 		return
 	}
 

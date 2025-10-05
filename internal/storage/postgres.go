@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -19,7 +20,6 @@ type PostgresTx struct {
 	tx *sqlx.Tx
 }
 
-// NewPostgresStorage создает новое подключение к PostgreSQL
 func NewPostgresStorage(databaseURL string) (*PostgresStorage, error) {
 	db, err := sqlx.Connect("postgres", databaseURL)
 	if err != nil {
@@ -29,40 +29,66 @@ func NewPostgresStorage(databaseURL string) (*PostgresStorage, error) {
 	return &PostgresStorage{db: db}, nil
 }
 
-// Init инициализирует таблицы в базе данных
 func (p *PostgresStorage) Init() error {
-	// Создание таблицы продуктов
 	_, err := p.db.Exec(`
 		CREATE TABLE IF NOT EXISTS products (
 			id SERIAL PRIMARY KEY,
 			name VARCHAR(255) NOT NULL,
 			description TEXT,
-			price DECIMAL(10,2) NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			price INTEGER NOT NULL,
+			quantity INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create products table: %w", err)
 	}
 
-	// Создание таблицы заказов
 	_, err = p.db.Exec(`
 		CREATE TABLE IF NOT EXISTS orders (
 			id SERIAL PRIMARY KEY,
-			customer_name VARCHAR(255) NOT NULL,
-			total_amount DECIMAL(10,2) NOT NULL,
+			user_id INTEGER NOT NULL,
 			status VARCHAR(50) NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			total INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create orders table: %w", err)
 	}
 
+	_, err = p.db.Exec(`
+		CREATE TABLE IF NOT EXISTS order_items (
+			id SERIAL PRIMARY KEY,
+			order_id INTEGER NOT NULL,
+			product_id INTEGER NOT NULL,
+			quantity INTEGER NOT NULL,
+			price INTEGER NOT NULL,
+			FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+			FOREIGN KEY (product_id) REFERENCES products(id)
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create order_items table: %w", err)
+	}
+
 	return nil
 }
 
-// Close закрывает подключение к базе данных
+func (p *PostgresStorage) SetMaxOpenConns(conns int) {
+	p.db.SetMaxOpenConns(conns)
+}
+
+func (p *PostgresStorage) SetMaxIdleConns(conns int) {
+	p.db.SetMaxIdleConns(conns)
+}
+
+func (p *PostgresStorage) SetConnMaxLifetime(lifetime time.Duration) {
+	p.db.SetConnMaxLifetime(lifetime)
+}
+
 func (p *PostgresStorage) Close() error {
 	return p.db.Close()
 }
@@ -77,103 +103,216 @@ func (p *PostgresStorage) BeginTx(ctx context.Context) (StorageTx, error) {
 	return &PostgresTx{tx: tx}, nil
 }
 
-// Добавляем недостающий метод BeginTx для PostgresTx
-func (pt *PostgresTx) BeginTx(ctx context.Context) (StorageTx, error) {
-	return pt, nil
-}
-
-// Реализация методов Storage для PostgresTx
-func (pt *PostgresTx) CreateProduct(product *models.Product) error {
+func (p *PostgresStorage) CreateProduct(ctx context.Context, product *models.Product) error {
 	query := `
-	INSERT INTO products (name, description, price) 
-	VALUES ($1, $2, $3) 
-	RETURNING id, created_at`
+	INSERT INTO products (name, description, price, quantity) 
+	VALUES ($1, $2, $3, $4) 
+	RETURNING id, created_at, updated_at`
 
-	return pt.tx.QueryRow(
+	return p.db.QueryRowContext(ctx,
 		query,
 		product.Name,
 		product.Description,
 		product.Price,
-	).Scan(&product.ID, &product.CreatedAt)
+		product.Quantity,
+	).Scan(&product.ID, &product.CreatedAt, &product.UpdatedAt)
 }
 
-func (pt *PostgresTx) GetAllProduct() ([]*models.Product, error) {
-	query := `SELECT id, name, description, price, created_at FROM products`
+func (p *PostgresStorage) GetAllProducts(ctx context.Context) ([]*models.Product, error) {
+	query := `SELECT id, name, description, price, quantity, created_at, updated_at FROM products`
 	var products []*models.Product
-	err := pt.tx.Select(&products, query)
+	err := p.db.SelectContext(ctx, &products, query)
 	return products, err
 }
 
-func (pt *PostgresTx) GetProductByID(id int) (*models.Product, error) {
-	query := `SELECT id, name, description, price, created_at FROM products WHERE id = $1`
+func (p *PostgresStorage) GetProductByID(ctx context.Context, id int) (*models.Product, error) {
+	query := `SELECT id, name, description, price, quantity, created_at, updated_at FROM products WHERE id = $1`
 	var product models.Product
-	err := pt.tx.Get(&product, query, id)
+	err := p.db.GetContext(ctx, &product, query, id)
 	if err == sql.ErrNoRows {
 		return nil, errors.New("product not found")
 	}
 	return &product, err
 }
 
-func (pt *PostgresTx) UpdateProduct(product *models.Product) error {
-	query := `UPDATE products SET name = $1, description = $2, price = $3 WHERE id = $4`
-	result, err := pt.tx.Exec(query, product.Name, product.Description, product.Price, product.ID)
-	if err != nil {
-		return err
-	}
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("product not found")
-	}
-	return nil
-}
-
-func (pt *PostgresTx) DeleteProduct(id int) error {
-	query := `DELETE FROM products WHERE id = $1`
-	result, err := pt.tx.Exec(query, id)
-	if err != nil {
-		return err
-	}
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("product not found")
-	}
-	return nil
-}
-
-func (pt *PostgresTx) CreateOrder(order *models.Order) error {
+func (p *PostgresStorage) UpdateProduct(ctx context.Context, product *models.Product) error {
 	query := `
-	INSERT INTO orders (customer_name, total_amount, status) 
-	VALUES ($1, $2, $3) 
-	RETURNING id, created_at`
+		UPDATE products 
+		SET name = $1, description = $2, price = $3, quantity = $4, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $5
+	`
+	result, err := p.db.ExecContext(ctx, query,
+		product.Name,
+		product.Description,
+		product.Price,
+		product.Quantity,
+		product.ID,
+	)
+	if err != nil {
+		return err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("product not found")
+	}
+	return nil
+}
 
-	return pt.tx.QueryRow(
-		query,
-		order.CustomerName,
-		order.TotalAmount,
+func (p *PostgresStorage) DeleteProduct(ctx context.Context, id int) error {
+	query := `DELETE FROM products WHERE id = $1`
+	result, err := p.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("product not found")
+	}
+	return nil
+}
+
+func (p *PostgresStorage) CreateOrder(ctx context.Context, order *models.Order) error {
+	total := 0
+	for _, item := range order.Products {
+		var productPrice int
+		err := p.db.GetContext(ctx, &productPrice, "SELECT price FROM products WHERE id = $1", item.ProductID)
+		if err != nil {
+			return fmt.Errorf("failed to get product price: %w", err)
+		}
+		total += productPrice * item.Quantity
+		item.Price = productPrice
+	}
+	order.Total = total
+
+	orderQuery := `
+		INSERT INTO orders (user_id, status, total) 
+		VALUES ($1, $2, $3) 
+		RETURNING id, created_at, updated_at`
+
+	err := p.db.QueryRowContext(ctx,
+		orderQuery,
+		order.UserID,
 		order.Status,
-	).Scan(&order.ID, &order.CreatedAt)
+		order.Total,
+	).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	itemQuery := `
+		INSERT INTO order_items (order_id, product_id, quantity, price) 
+		VALUES ($1, $2, $3, $4)`
+
+	for _, item := range order.Products {
+		_, err = p.db.ExecContext(ctx, itemQuery, order.ID, item.ProductID, item.Quantity, item.Price)
+		if err != nil {
+			return fmt.Errorf("failed to create order item: %w", err)
+		}
+	}
+
+	return nil
 }
 
-func (pt *PostgresTx) GetAllOrders() ([]*models.Order, error) {
-	query := `SELECT id, customer_name, total_amount, status, created_at FROM orders`
+func (p *PostgresStorage) GetAllOrders(ctx context.Context) ([]*models.Order, error) {
+	query := `SELECT id, user_id, status, total, created_at, updated_at FROM orders`
 	var orders []*models.Order
-	err := pt.tx.Select(&orders, query)
-	return orders, err
+	err := p.db.SelectContext(ctx, &orders, query)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range orders {
+		itemsQuery := `
+			SELECT id, order_id, product_id, quantity, price 
+			FROM order_items 
+			WHERE order_id = $1`
+
+		var items []models.OrderItem
+		err := p.db.SelectContext(ctx, &items, itemsQuery, orders[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get order items: %w", err)
+		}
+		orders[i].Products = items
+	}
+
+	return orders, nil
 }
 
-func (pt *PostgresTx) GetOrderByID(id int) (*models.Order, error) {
-	query := `SELECT id, customer_name, total_amount, status, created_at FROM orders WHERE id = $1`
+func (p *PostgresStorage) GetOrderByID(ctx context.Context, id int) (*models.Order, error) {
+	query := `SELECT id, user_id, status, total, created_at, updated_at FROM orders WHERE id = $1`
 	var order models.Order
-	err := pt.tx.Get(&order, query, id)
+	err := p.db.GetContext(ctx, &order, query, id)
 	if err == sql.ErrNoRows {
 		return nil, errors.New("order not found")
 	}
-	return &order, err
+	if err != nil {
+		return nil, err
+	}
+
+	itemsQuery := `
+		SELECT id, order_id, product_id, quantity, price 
+		FROM order_items 
+		WHERE order_id = $1`
+
+	var items []models.OrderItem
+	err = p.db.SelectContext(ctx, &items, itemsQuery, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get order items: %w", err)
+	}
+	order.Products = items
+
+	return &order, nil
 }
 
-func (pt *PostgresTx) UpdateOrder(order *models.Order) error {
-	query := `UPDATE orders SET customer_name = $1, total_amount = $2, status = $3 WHERE id = $4`
-	result, err := pt.tx.Exec(query, order.CustomerName, order.TotalAmount, order.Status, order.ID)
+func (p *PostgresStorage) UpdateOrder(ctx context.Context, order *models.Order) error {
+	total := 0
+	for _, item := range order.Products {
+		var productPrice int
+		err := p.db.GetContext(ctx, &productPrice, "SELECT price FROM products WHERE id = $1", item.ProductID)
+		if err != nil {
+			return fmt.Errorf("failed to get product price: %w", err)
+		}
+		total += productPrice * item.Quantity
+		item.Price = productPrice
+	}
+	order.Total = total
+
+	query := `
+		UPDATE orders 
+		SET user_id = $1, status = $2, total = $3, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $4`
+
+	result, err := p.db.ExecContext(ctx, query, order.UserID, order.Status, order.Total, order.ID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("order not found")
+	}
+
+	_, err = p.db.ExecContext(ctx, "DELETE FROM order_items WHERE order_id = $1", order.ID)
+	if err != nil {
+		return fmt.Errorf("failed to delete old order items: %w", err)
+	}
+
+	itemQuery := `
+		INSERT INTO order_items (order_id, product_id, quantity, price) 
+		VALUES ($1, $2, $3, $4)`
+
+	for _, item := range order.Products {
+		_, err = p.db.ExecContext(ctx, itemQuery, order.ID, item.ProductID, item.Quantity, item.Price)
+		if err != nil {
+			return fmt.Errorf("failed to create order item: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (p *PostgresStorage) DeleteOrder(ctx context.Context, id int) error {
+	query := `DELETE FROM orders WHERE id = $1`
+	result, err := p.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
 	}
@@ -184,9 +323,220 @@ func (pt *PostgresTx) UpdateOrder(order *models.Order) error {
 	return nil
 }
 
-func (pt *PostgresTx) DeleteOrder(id int) error {
+func (pt *PostgresTx) BeginTx(ctx context.Context) (StorageTx, error) {
+	return pt, nil
+}
+
+func (pt *PostgresTx) CreateProduct(ctx context.Context, product *models.Product) error {
+	query := `
+	INSERT INTO products (name, description, price, quantity) 
+	VALUES ($1, $2, $3, $4) 
+	RETURNING id, created_at, updated_at`
+
+	return pt.tx.QueryRowContext(ctx,
+		query,
+		product.Name,
+		product.Description,
+		product.Price,
+		product.Quantity,
+	).Scan(&product.ID, &product.CreatedAt, &product.UpdatedAt)
+}
+
+func (pt *PostgresTx) GetAllProducts(ctx context.Context) ([]*models.Product, error) {
+	query := `SELECT id, name, description, price, quantity, created_at, updated_at FROM products`
+	var products []*models.Product
+	err := pt.tx.SelectContext(ctx, &products, query)
+	return products, err
+}
+
+func (pt *PostgresTx) GetProductByID(ctx context.Context, id int) (*models.Product, error) {
+	query := `SELECT id, name, description, price, quantity, created_at, updated_at FROM products WHERE id = $1`
+	var product models.Product
+	err := pt.tx.GetContext(ctx, &product, query, id)
+	if err == sql.ErrNoRows {
+		return nil, errors.New("product not found")
+	}
+	return &product, err
+}
+
+func (pt *PostgresTx) UpdateProduct(ctx context.Context, product *models.Product) error {
+	query := `
+		UPDATE products 
+		SET name = $1, description = $2, price = $3, quantity = $4, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $5
+	`
+	result, err := pt.tx.ExecContext(ctx, query,
+		product.Name,
+		product.Description,
+		product.Price,
+		product.Quantity,
+		product.ID,
+	)
+	if err != nil {
+		return err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("product not found")
+	}
+	return nil
+}
+
+func (pt *PostgresTx) DeleteProduct(ctx context.Context, id int) error {
+	query := `DELETE FROM products WHERE id = $1`
+	result, err := pt.tx.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("product not found")
+	}
+	return nil
+}
+
+func (pt *PostgresTx) CreateOrder(ctx context.Context, order *models.Order) error {
+	total := 0
+	for _, item := range order.Products {
+		var productPrice int
+		err := pt.tx.GetContext(ctx, &productPrice, "SELECT price FROM products WHERE id = $1", item.ProductID)
+		if err != nil {
+			return fmt.Errorf("failed to get product price: %w", err)
+		}
+		total += productPrice * item.Quantity
+		item.Price = productPrice
+	}
+	order.Total = total
+
+	orderQuery := `
+		INSERT INTO orders (user_id, status, total) 
+		VALUES ($1, $2, $3) 
+		RETURNING id, created_at, updated_at`
+
+	err := pt.tx.QueryRowContext(ctx,
+		orderQuery,
+		order.UserID,
+		order.Status,
+		order.Total,
+	).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	itemQuery := `
+		INSERT INTO order_items (order_id, product_id, quantity, price) 
+		VALUES ($1, $2, $3, $4)`
+
+	for _, item := range order.Products {
+		_, err = pt.tx.ExecContext(ctx, itemQuery, order.ID, item.ProductID, item.Quantity, item.Price)
+		if err != nil {
+			return fmt.Errorf("failed to create order item: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (pt *PostgresTx) GetAllOrders(ctx context.Context) ([]*models.Order, error) {
+	query := `SELECT id, user_id, status, total, created_at, updated_at FROM orders`
+	var orders []*models.Order
+	err := pt.tx.SelectContext(ctx, &orders, query)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range orders {
+		itemsQuery := `
+			SELECT id, order_id, product_id, quantity, price 
+			FROM order_items 
+			WHERE order_id = $1`
+
+		var items []models.OrderItem
+		err := pt.tx.SelectContext(ctx, &items, itemsQuery, orders[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get order items: %w", err)
+		}
+		orders[i].Products = items
+	}
+
+	return orders, nil
+}
+
+func (pt *PostgresTx) GetOrderByID(ctx context.Context, id int) (*models.Order, error) {
+	query := `SELECT id, user_id, status, total, created_at, updated_at FROM orders WHERE id = $1`
+	var order models.Order
+	err := pt.tx.GetContext(ctx, &order, query, id)
+	if err == sql.ErrNoRows {
+		return nil, errors.New("order not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	itemsQuery := `
+		SELECT id, order_id, product_id, quantity, price 
+		FROM order_items 
+		WHERE order_id = $1`
+
+	var items []models.OrderItem
+	err = pt.tx.SelectContext(ctx, &items, itemsQuery, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get order items: %w", err)
+	}
+	order.Products = items
+
+	return &order, nil
+}
+
+func (pt *PostgresTx) UpdateOrder(ctx context.Context, order *models.Order) error {
+	total := 0
+	for _, item := range order.Products {
+		var productPrice int
+		err := pt.tx.GetContext(ctx, &productPrice, "SELECT price FROM products WHERE id = $1", item.ProductID)
+		if err != nil {
+			return fmt.Errorf("failed to get product price: %w", err)
+		}
+		total += productPrice * item.Quantity
+		item.Price = productPrice
+	}
+	order.Total = total
+
+	query := `
+		UPDATE orders 
+		SET user_id = $1, status = $2, total = $3, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $4`
+
+	result, err := pt.tx.ExecContext(ctx, query, order.UserID, order.Status, order.Total, order.ID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("order not found")
+	}
+
+	_, err = pt.tx.ExecContext(ctx, "DELETE FROM order_items WHERE order_id = $1", order.ID)
+	if err != nil {
+		return fmt.Errorf("failed to delete old order items: %w", err)
+	}
+
+	itemQuery := `
+		INSERT INTO order_items (order_id, product_id, quantity, price) 
+		VALUES ($1, $2, $3, $4)`
+
+	for _, item := range order.Products {
+		_, err = pt.tx.ExecContext(ctx, itemQuery, order.ID, item.ProductID, item.Quantity, item.Price)
+		if err != nil {
+			return fmt.Errorf("failed to create order item: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (pt *PostgresTx) DeleteOrder(ctx context.Context, id int) error {
 	query := `DELETE FROM orders WHERE id = $1`
-	result, err := pt.tx.Exec(query, id)
+	result, err := pt.tx.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
 	}
@@ -205,116 +555,12 @@ func (pt *PostgresTx) Rollback() error {
 	return pt.tx.Rollback()
 }
 
-func (p *PostgresStorage) CreateProduct(product *models.Product) error {
-	query := `
-	INSERT INTO products (name, description, price) 
-	VALUES ($1, $2, $3) 
-	RETURNING id, created_at`
-
-	return p.db.QueryRow(
-		query,
-		product.Name,
-		product.Description,
-		product.Price,
-	).Scan(&product.ID, &product.CreatedAt)
-}
-
-func (p *PostgresStorage) GetAllProduct() ([]*models.Product, error) {
-	query := `SELECT id, name, description, price, created_at FROM products`
-	var products []*models.Product
-	err := p.db.Select(&products, query)
-	return products, err
-}
-
-func (p *PostgresStorage) GetProductByID(id int) (*models.Product, error) {
-	query := `SELECT id, name, description, price, created_at FROM products WHERE id = $1`
-	var product models.Product
-	err := p.db.Get(&product, query, id)
-	if err == sql.ErrNoRows {
-		return nil, errors.New("product not found")
-	}
-	return &product, err
-}
-
-func (p *PostgresStorage) UpdateProduct(product *models.Product) error {
-	query := `UPDATE products SET name = $1, description = $2, price = $3 WHERE id = $4`
-	result, err := p.db.Exec(query, product.Name, product.Description, product.Price, product.ID)
-	if err != nil {
-		return err
-	}
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("product not found")
-	}
+func (pt *PostgresTx) Close() error {
 	return nil
 }
 
-func (p *PostgresStorage) DeleteProduct(id int) error {
-	query := `DELETE FROM products WHERE id = $1`
-	result, err := p.db.Exec(query, id)
-	if err != nil {
-		return err
-	}
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("product not found")
-	}
-	return nil
-}
-
-func (p *PostgresStorage) CreateOrder(order *models.Order) error {
-	query := `
-	INSERT INTO orders (customer_name, total_amount, status) 
-	VALUES ($1, $2, $3) 
-	RETURNING id, created_at`
-
-	return p.db.QueryRow(
-		query,
-		order.CustomerName,
-		order.TotalAmount,
-		order.Status,
-	).Scan(&order.ID, &order.CreatedAt)
-}
-
-func (p *PostgresStorage) GetAllOrders() ([]*models.Order, error) {
-	query := `SELECT id, customer_name, total_amount, status, created_at FROM orders`
-	var orders []*models.Order
-	err := p.db.Select(&orders, query)
-	return orders, err
-}
-
-func (p *PostgresStorage) GetOrderByID(id int) (*models.Order, error) {
-	query := `SELECT id, customer_name, total_amount, status, created_at FROM orders WHERE id = $1`
-	var order models.Order
-	err := p.db.Get(&order, query, id)
-	if err == sql.ErrNoRows {
-		return nil, errors.New("order not found")
-	}
-	return &order, err
-}
-
-func (p *PostgresStorage) UpdateOrder(order *models.Order) error {
-	query := `UPDATE orders SET customer_name = $1, total_amount = $2, status = $3 WHERE id = $4`
-	result, err := p.db.Exec(query, order.CustomerName, order.TotalAmount, order.Status, order.ID)
-	if err != nil {
-		return err
-	}
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("order not found")
-	}
-	return nil
-}
-
-func (p *PostgresStorage) DeleteOrder(id int) error {
-	query := `DELETE FROM orders WHERE id = $1`
-	result, err := p.db.Exec(query, id)
-	if err != nil {
-		return err
-	}
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("order not found")
-	}
-	return nil
+func (p *PostgresStorage) UpdateProductQuantity(ctx context.Context, id int, quantity int) error {
+	query := `UPDATE products SET quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
+	_, err := p.db.ExecContext(ctx, query, quantity, id)
+	return err
 }

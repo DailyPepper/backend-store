@@ -5,31 +5,34 @@ services:
     image: postgres:15-alpine
     container_name: backend-store-db
     environment:
-      POSTGRES_DB: store_db
-      POSTGRES_USER: store_user
-      POSTGRES_PASSWORD: store_password
+      POSTGRES_DB: ${POSTGRES_DB:-store_db}
+      POSTGRES_USER: ${POSTGRES_USER:-store_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-store_password}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
     networks:
       - backend-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U store_user -d store_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-store_user} -d ${POSTGRES_DB:-store_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: backend-store-app
     environment:
-      DATABASE_URL: "postgres://store_user:store_password@postgres:5432/store_db?sslmode=disable"
-      GIN_MODE: release
+      DATABASE_URL: "postgres://${POSTGRES_USER:-store_user}:${POSTGRES_PASSWORD:-store_password}@postgres:5432/${POSTGRES_DB:-store_db}?sslmode=disable"
+      SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
     ports:
-      - "8080:8080"
+      - "${APP_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy

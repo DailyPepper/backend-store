@@ -21,6 +21,10 @@ type MemoryTx struct {
 	mu      *sync.RWMutex
 }
 
+func (mt *MemoryTx) Close() error {
+	panic("unimplemented")
+}
+
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
 		products: make(map[int]*models.Product),
@@ -28,9 +32,12 @@ func NewMemoryStorage() *MemoryStorage {
 	}
 }
 
+func (m *MemoryStorage) Close() error {
+	return nil
+}
+
 func (m *MemoryStorage) BeginTx(ctx context.Context) (StorageTx, error) {
 	m.mu.Lock()
-
 	return &MemoryTx{
 		storage: m,
 		mu:      &m.mu,
@@ -51,8 +58,7 @@ func (mt *MemoryTx) Rollback() error {
 	return nil
 }
 
-// Реализация методов Storage для MemoryTx
-func (mt *MemoryTx) CreateProduct(product *models.Product) error {
+func (mt *MemoryTx) CreateProduct(ctx context.Context, product *models.Product) error {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 
@@ -62,7 +68,7 @@ func (mt *MemoryTx) CreateProduct(product *models.Product) error {
 	return nil
 }
 
-func (mt *MemoryTx) GetAllProduct() ([]*models.Product, error) {
+func (mt *MemoryTx) GetAllProducts(ctx context.Context) ([]*models.Product, error) {
 	mt.mu.RLock()
 	defer mt.mu.RUnlock()
 
@@ -73,7 +79,7 @@ func (mt *MemoryTx) GetAllProduct() ([]*models.Product, error) {
 	return products, nil
 }
 
-func (mt *MemoryTx) GetProductByID(id int) (*models.Product, error) {
+func (mt *MemoryTx) GetProductByID(ctx context.Context, id int) (*models.Product, error) {
 	mt.mu.RLock()
 	defer mt.mu.RUnlock()
 
@@ -84,7 +90,7 @@ func (mt *MemoryTx) GetProductByID(id int) (*models.Product, error) {
 	return product, nil
 }
 
-func (mt *MemoryTx) UpdateProduct(product *models.Product) error {
+func (mt *MemoryTx) UpdateProduct(ctx context.Context, product *models.Product) error {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 
@@ -95,7 +101,7 @@ func (mt *MemoryTx) UpdateProduct(product *models.Product) error {
 	return nil
 }
 
-func (mt *MemoryTx) DeleteProduct(id int) error {
+func (mt *MemoryTx) DeleteProduct(ctx context.Context, id int) error {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 
@@ -106,7 +112,7 @@ func (mt *MemoryTx) DeleteProduct(id int) error {
 	return nil
 }
 
-func (mt *MemoryTx) CreateOrder(order *models.Order) error {
+func (mt *MemoryTx) CreateOrder(ctx context.Context, order *models.Order) error {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 
@@ -116,7 +122,7 @@ func (mt *MemoryTx) CreateOrder(order *models.Order) error {
 	return nil
 }
 
-func (mt *MemoryTx) GetAllOrders() ([]*models.Order, error) {
+func (mt *MemoryTx) GetAllOrders(ctx context.Context) ([]*models.Order, error) {
 	mt.mu.RLock()
 	defer mt.mu.RUnlock()
 
@@ -127,7 +133,7 @@ func (mt *MemoryTx) GetAllOrders() ([]*models.Order, error) {
 	return orders, nil
 }
 
-func (mt *MemoryTx) GetOrderByID(id int) (*models.Order, error) {
+func (mt *MemoryTx) GetOrderByID(ctx context.Context, id int) (*models.Order, error) {
 	mt.mu.RLock()
 	defer mt.mu.RUnlock()
 
@@ -138,7 +144,7 @@ func (mt *MemoryTx) GetOrderByID(id int) (*models.Order, error) {
 	return order, nil
 }
 
-func (mt *MemoryTx) UpdateOrder(order *models.Order) error {
+func (mt *MemoryTx) UpdateOrder(ctx context.Context, order *models.Order) error {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 
@@ -149,7 +155,7 @@ func (mt *MemoryTx) UpdateOrder(order *models.Order) error {
 	return nil
 }
 
-func (mt *MemoryTx) DeleteOrder(id int) error {
+func (mt *MemoryTx) DeleteOrder(ctx context.Context, id int) error {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 
@@ -160,8 +166,7 @@ func (mt *MemoryTx) DeleteOrder(id int) error {
 	return nil
 }
 
-// Реализация методов Storage для MemoryStorage (без транзакций)
-func (m *MemoryStorage) CreateProduct(product *models.Product) error {
+func (m *MemoryStorage) CreateProduct(ctx context.Context, product *models.Product) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -171,7 +176,7 @@ func (m *MemoryStorage) CreateProduct(product *models.Product) error {
 	return nil
 }
 
-func (m *MemoryStorage) GetAllProduct() ([]*models.Product, error) {
+func (m *MemoryStorage) GetAllProducts(ctx context.Context) ([]*models.Product, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -182,7 +187,7 @@ func (m *MemoryStorage) GetAllProduct() ([]*models.Product, error) {
 	return products, nil
 }
 
-func (m *MemoryStorage) GetProductByID(id int) (*models.Product, error) {
+func (m *MemoryStorage) GetProductByID(ctx context.Context, id int) (*models.Product, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -193,7 +198,7 @@ func (m *MemoryStorage) GetProductByID(id int) (*models.Product, error) {
 	return product, nil
 }
 
-func (m *MemoryStorage) UpdateProduct(product *models.Product) error {
+func (m *MemoryStorage) UpdateProduct(ctx context.Context, product *models.Product) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -204,7 +209,7 @@ func (m *MemoryStorage) UpdateProduct(product *models.Product) error {
 	return nil
 }
 
-func (m *MemoryStorage) DeleteProduct(id int) error {
+func (m *MemoryStorage) DeleteProduct(ctx context.Context, id int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -215,7 +220,7 @@ func (m *MemoryStorage) DeleteProduct(id int) error {
 	return nil
 }
 
-func (m *MemoryStorage) CreateOrder(order *models.Order) error {
+func (m *MemoryStorage) CreateOrder(ctx context.Context, order *models.Order) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -225,7 +230,7 @@ func (m *MemoryStorage) CreateOrder(order *models.Order) error {
 	return nil
 }
 
-func (m *MemoryStorage) GetAllOrders() ([]*models.Order, error) {
+func (m *MemoryStorage) GetAllOrders(ctx context.Context) ([]*models.Order, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -236,7 +241,7 @@ func (m *MemoryStorage) GetAllOrders() ([]*models.Order, error) {
 	return orders, nil
 }
 
-func (m *MemoryStorage) GetOrderByID(id int) (*models.Order, error) {
+func (m *MemoryStorage) GetOrderByID(ctx context.Context, id int) (*models.Order, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -247,7 +252,7 @@ func (m *MemoryStorage) GetOrderByID(id int) (*models.Order, error) {
 	return order, nil
 }
 
-func (m *MemoryStorage) UpdateOrder(order *models.Order) error {
+func (m *MemoryStorage) UpdateOrder(ctx context.Context, order *models.Order) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -258,7 +263,7 @@ func (m *MemoryStorage) UpdateOrder(order *models.Order) error {
 	return nil
 }
 
-func (m *MemoryStorage) DeleteOrder(id int) error {
+func (m *MemoryStorage) DeleteOrder(ctx context.Context, id int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
