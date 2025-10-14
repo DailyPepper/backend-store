@@ -3,9 +3,9 @@ package main
 import (
 	"backend-store/config"
 	"backend-store/internal/app"
+	"backend-store/pkg/logger"
 	"context"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,15 +18,19 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+var log logger.Log
+
 func main() {
 	cfg := config.Load()
+	log = logger.New(cfg.LogLevel)
 
 	setupLogging(cfg)
 
-	log.Printf("Starting application in %s mode", cfg.Environment)
-	log.Printf("Server will start on %s:%s", cfg.ServerHost, cfg.ServerPort)
+	log.Info("Starting application", "mode", cfg.Environment)
+	log.Info("Server will start on", "address", cfg.ServerHost+":"+cfg.ServerPort)
 
-	application, err := app.New(cfg)
+	// Передаем логгер как второй параметр
+	application, err := app.New(cfg, log)
 	if err != nil {
 		log.Fatal("Failed to initialize application:", err)
 	}
@@ -40,7 +44,6 @@ func main() {
 func setupLogging(cfg *config.Config) {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
-		log.SetOutput(os.Stdout)
 	} else {
 		gin.SetMode(gin.DebugMode)
 	}
@@ -114,16 +117,16 @@ func startServer(cfg *config.Config, router *gin.Engine) {
 	}
 
 	go func() {
-		log.Printf("Server starting on %s", srv.Addr)
+		log.Info("Server starting on", "address", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+			log.Fatal("Failed to start server:", err)
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	log.Info("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
@@ -132,5 +135,5 @@ func startServer(cfg *config.Config, router *gin.Engine) {
 		log.Fatal("Server forced to shutdown:", err)
 	}
 
-	log.Println("Server exited")
+	log.Info("Server exited")
 }

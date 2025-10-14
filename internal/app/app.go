@@ -5,7 +5,7 @@ import (
 	"backend-store/internal/handlers"
 	"backend-store/internal/service"
 	"backend-store/internal/storage"
-	"log"
+	"backend-store/pkg/logger"
 )
 
 type App struct {
@@ -13,6 +13,7 @@ type App struct {
 	Storage  storage.Storage
 	Services *Services
 	Handlers *Handlers
+	log      logger.Log
 }
 
 type Services struct {
@@ -25,32 +26,35 @@ type Handlers struct {
 	OrderHandler   *handlers.OrderHandler
 }
 
-func New(cfg *config.Config) (*App, error) {
-	app := &App{Config: cfg}
+func New(cfg *config.Config, log logger.Log) (*App, error) {
+	app := &App{
+		Config: cfg,
+		log:    log,
+	}
 
-	store, err := initStorage(cfg)
+	store, err := app.initStorage()
 	if err != nil {
 		return nil, err
 	}
 	app.Storage = store
-	app.Services = initServices(store)
+	app.Services = app.initServices()
+	app.Handlers = app.initHandlers()
 
-	app.Handlers = initHandlers(app.Services)
-
+	app.log.Info("Application initialized successfully")
 	return app, nil
 }
 
-func initStorage(cfg *config.Config) (storage.Storage, error) {
-	if cfg.DatabaseURL != "" {
-		log.Println("Using PostgreSQL storage")
-		postgresStore, err := storage.NewPostgresStorage(cfg.DatabaseURL)
+func (a *App) initStorage() (storage.Storage, error) {
+	if a.Config.DatabaseURL != "" {
+		a.log.Info("Using PostgreSQL storage")
+		postgresStore, err := storage.NewPostgresStorage(a.Config.DatabaseURL)
 		if err != nil {
 			return nil, err
 		}
 
-		postgresStore.SetMaxOpenConns(cfg.MaxOpenConns)
-		postgresStore.SetMaxIdleConns(cfg.MaxIdleConns)
-		postgresStore.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+		postgresStore.SetMaxOpenConns(a.Config.MaxOpenConns)
+		postgresStore.SetMaxIdleConns(a.Config.MaxIdleConns)
+		postgresStore.SetConnMaxLifetime(a.Config.ConnMaxLifetime)
 
 		if err := postgresStore.Init(); err != nil {
 			return nil, err
@@ -59,27 +63,28 @@ func initStorage(cfg *config.Config) (storage.Storage, error) {
 		return postgresStore, nil
 	}
 
-	log.Println("Using in-memory storage")
+	a.log.Info("Using in-memory storage")
 	memoryStore := storage.NewMemoryStorage()
 	return memoryStore, nil
 }
 
-func initServices(store storage.Storage) *Services {
+func (a *App) initServices() *Services {
 	return &Services{
-		ProductService: service.NewProductService(store),
-		OrderService:   service.NewOrderService(store),
+		ProductService: service.NewProductService(a.Storage),
+		OrderService:   service.NewOrderService(a.Storage),
 	}
 }
 
-func initHandlers(services *Services) *Handlers {
+func (a *App) initHandlers() *Handlers {
 	return &Handlers{
-		ProductHandler: handlers.NewProductHandler(services.ProductService),
-		OrderHandler:   handlers.NewOrderHandler(services.OrderService),
+		ProductHandler: handlers.NewProductHandler(a.Services.ProductService),
+		OrderHandler:   handlers.NewOrderHandler(a.Services.OrderService),
 	}
 }
 
 func (a *App) Close() error {
 	if a.Storage != nil {
+		a.log.Info("Closing application resources")
 		return a.Storage.Close()
 	}
 	return nil

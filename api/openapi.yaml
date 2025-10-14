@@ -436,7 +436,12 @@ components:
       required:
         - customer_name
         - total_amount
+        # - user_id
       properties:
+        user_id:
+          type: integer
+          description: User ID (optional - will be auto-generated if not provided)
+          example: 1
         customer_name:
           type: string
           description: Name of the customer
@@ -457,6 +462,7 @@ components:
       required:
         - customer_name
         - total_amount
+        - user_id
         - status
       properties:
         customer_name:
