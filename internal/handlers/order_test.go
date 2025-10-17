@@ -93,7 +93,6 @@ func TestOrderHandler_CreateOrder_Success(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &response)
 
 	assert.Equal(t, 1, response.ID)
-	assert.Equal(t, 1, response.UserID)
 	assert.Equal(t, 9999, response.Total)
 	assert.Equal(t, "pending", response.Status)
 	mockService.AssertExpectations(t)
@@ -164,7 +163,6 @@ func TestOrderHandler_GetAllOrders_Success(t *testing.T) {
 	expectedOrders := []*models.Order{
 		{
 			ID:     1,
-			UserID: 1,
 			Total:  9999,
 			Status: "completed",
 			Products: []models.OrderItem{
@@ -175,7 +173,6 @@ func TestOrderHandler_GetAllOrders_Success(t *testing.T) {
 		},
 		{
 			ID:     2,
-			UserID: 2,
 			Total:  14999,
 			Status: "pending",
 			Products: []models.OrderItem{
@@ -220,7 +217,6 @@ func TestOrderHandler_GetAllOrders_Pagination(t *testing.T) {
 	for i := 0; i < 15; i++ {
 		orders[i] = &models.Order{
 			ID:     i + 1,
-			UserID: i + 1,
 			Total:  1000,
 			Status: "pending",
 		}
@@ -259,7 +255,6 @@ func TestOrderHandler_GetOrderByID_Success(t *testing.T) {
 
 	expectedOrder := &models.Order{
 		ID:     1,
-		UserID: 1,
 		Total:  9999,
 		Status: "completed",
 		Products: []models.OrderItem{
@@ -283,7 +278,6 @@ func TestOrderHandler_GetOrderByID_Success(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &response)
 
 	assert.Equal(t, expectedOrder.ID, response.ID)
-	assert.Equal(t, expectedOrder.UserID, response.UserID)
 	assert.Equal(t, expectedOrder.Total, response.Total)
 	mockService.AssertExpectations(t)
 }
@@ -362,7 +356,6 @@ func TestOrderHandler_UpdateOrder_Success(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &response)
 
 	assert.Equal(t, 1, response.ID)
-	assert.Equal(t, 1, response.UserID)
 	assert.Equal(t, 14999, response.Total)
 	assert.Equal(t, "completed", response.Status)
 	mockService.AssertExpectations(t)

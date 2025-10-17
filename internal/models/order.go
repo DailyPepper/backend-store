@@ -7,7 +7,6 @@ import (
 
 type Order struct {
 	ID        int         `json:"id"`
-	UserID    int         `json:"user_id"`
 	Products  []OrderItem `json:"products"`
 	Status    string      `json:"status"`
 	Total     int         `json:"total"`
@@ -24,7 +23,7 @@ type OrderItem struct {
 }
 
 func (o *Order) Validate() error {
-	if o.UserID <= 0 {
+	if o.ID <= 0 {
 		return errors.New("user ID is required")
 	}
 	if len(o.Products) == 0 {

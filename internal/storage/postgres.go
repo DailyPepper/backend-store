@@ -191,7 +191,7 @@ func (p *PostgresStorage) CreateOrder(ctx context.Context, order *models.Order) 
 
 	err := p.db.QueryRowContext(ctx,
 		orderQuery,
-		order.UserID,
+		order.ID,
 		order.Status,
 		order.Total,
 	).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
@@ -282,7 +282,7 @@ func (p *PostgresStorage) UpdateOrder(ctx context.Context, order *models.Order) 
 		SET user_id = $1, status = $2, total = $3, updated_at = CURRENT_TIMESTAMP 
 		WHERE id = $4`
 
-	result, err := p.db.ExecContext(ctx, query, order.UserID, order.Status, order.Total, order.ID)
+	result, err := p.db.ExecContext(ctx, query, order.ID, order.Status, order.Total)
 	if err != nil {
 		return err
 	}
@@ -415,7 +415,7 @@ func (pt *PostgresTx) CreateOrder(ctx context.Context, order *models.Order) erro
 
 	err := pt.tx.QueryRowContext(ctx,
 		orderQuery,
-		order.UserID,
+		order.ID,
 		order.Status,
 		order.Total,
 	).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
@@ -506,7 +506,7 @@ func (pt *PostgresTx) UpdateOrder(ctx context.Context, order *models.Order) erro
 		SET user_id = $1, status = $2, total = $3, updated_at = CURRENT_TIMESTAMP 
 		WHERE id = $4`
 
-	result, err := pt.tx.ExecContext(ctx, query, order.UserID, order.Status, order.Total, order.ID)
+	result, err := pt.tx.ExecContext(ctx, query, order.ID, order.Status, order.Total)
 	if err != nil {
 		return err
 	}

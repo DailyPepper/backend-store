@@ -12,7 +12,6 @@ func TestOrder_JSONSerialization(t *testing.T) {
 	// Arrange
 	order := &Order{
 		ID:     1,
-		UserID: 1,
 		Total:  9999,
 		Status: "completed",
 		Products: []OrderItem{
@@ -38,7 +37,6 @@ func TestOrder_JSONSerialization(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, order.ID, decodedOrder.ID)
-	assert.Equal(t, order.UserID, decodedOrder.UserID)
 	assert.Equal(t, order.Total, decodedOrder.Total)
 	assert.Equal(t, order.Status, decodedOrder.Status)
 	assert.Len(t, decodedOrder.Products, 1)
@@ -77,7 +75,6 @@ func TestOrder_EmptyProducts(t *testing.T) {
 	// Arrange
 	order := &Order{
 		ID:        1,
-		UserID:    1,
 		Total:     0,
 		Status:    "pending",
 		Products:  []OrderItem{}, // Пустой список продуктов
@@ -95,7 +92,6 @@ func TestOrder_EmptyProducts(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, order.ID, decodedOrder.ID)
-	assert.Equal(t, order.UserID, decodedOrder.UserID)
 	assert.Equal(t, order.Total, decodedOrder.Total)
 	assert.Equal(t, order.Status, decodedOrder.Status)
 	assert.Empty(t, decodedOrder.Products) // Должен быть пустой массив
@@ -105,7 +101,6 @@ func TestOrder_NilProducts(t *testing.T) {
 	// Arrange
 	order := &Order{
 		ID:        1,
-		UserID:    1,
 		Total:     0,
 		Status:    "pending",
 		Products:  nil, // nil вместо массива
@@ -123,7 +118,6 @@ func TestOrder_NilProducts(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, order.ID, decodedOrder.ID)
-	assert.Equal(t, order.UserID, decodedOrder.UserID)
 	assert.Equal(t, order.Total, decodedOrder.Total)
 	assert.Equal(t, order.Status, decodedOrder.Status)
 	assert.Nil(t, decodedOrder.Products) // Должен остаться nil
