@@ -28,6 +28,9 @@ type Config struct {
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	ShutdownTimeout time.Duration
+
+	// Auth
+	AuthServiceURL string
 }
 
 func Load() *Config {
@@ -48,6 +51,8 @@ func Load() *Config {
 		ReadTimeout:     getEnvAsDuration("READ_TIMEOUT", 15*time.Second),
 		WriteTimeout:    getEnvAsDuration("WRITE_TIMEOUT", 15*time.Second),
 		ShutdownTimeout: getEnvAsDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
+
+		AuthServiceURL: getEnv("AUTH_SERVICE_URL", "localhost:50051"),
 	}
 }
 

@@ -26,6 +26,7 @@ type Handlers struct {
 	OrderHandler   *handlers.OrderHandler
 }
 
+// Упрощаем - authClient не нужен внутри app, только в main
 func New(cfg *config.Config, log logger.Log) (*App, error) {
 	app := &App{
 		Config: cfg,
@@ -71,7 +72,7 @@ func (a *App) initStorage() (storage.Storage, error) {
 func (a *App) initServices() *Services {
 	return &Services{
 		ProductService: service.NewProductService(a.Storage),
-		OrderService:   service.NewOrderService(a.Storage),
+		OrderService:   service.NewOrderService(a.Storage), // у вас был 1 параметр
 	}
 }
 
