@@ -36,7 +36,6 @@ func (c *AuthClient) Close() error {
 	return c.conn.Close()
 }
 
-// Методы для работы с аутентификацией
 func (c *AuthClient) Register(ctx context.Context, email, password, firstName, lastName string) (*pb.RegisterResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()

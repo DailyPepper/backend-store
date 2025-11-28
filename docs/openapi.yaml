@@ -55,6 +55,8 @@ paths:
               required:
                 - email
                 - password
+                - first_name
+                - surname
               properties:
                 email:
                   type: string
@@ -65,6 +67,12 @@ paths:
                   format: password
                   minLength: 6
                   example: "password123"
+                first_name:
+                  type: string
+                  example: "John"
+                surname:
+                  type: string
+                  example: "Doe"
       responses:
         '201':
           description: User registered successfully
@@ -77,10 +85,29 @@ paths:
                     type: string
                     example: "User registered successfully"
                   user_id:
+                    type: integer
+                    example: 1
+                  access_token:
                     type: string
-                    example: "user-123"
+                    example: "access_token_user@example.com"
+                  refresh_token:
+                    type: string
+                    example: "refresh_token_user@example.com"
+                  expires_at:
+                    type: string
+                    format: date-time
         '400':
           $ref: '#/components/responses/BadRequest'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "user with this email already exists"
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -115,12 +142,15 @@ paths:
               schema:
                 type: object
                 properties:
-                  token:
+                  access_token:
                     type: string
-                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  user_id:
+                    example: "access_token_user@example.com"
+                  refresh_token:
                     type: string
-                    example: "user-123"
+                    example: "refresh_token_user@example.com"
+                  expires_at:
+                    type: string
+                    format: date-time
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
